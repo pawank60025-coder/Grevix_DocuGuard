@@ -191,128 +191,399 @@ st.session_state.setdefault("active_input_name", None)
 st.session_state.setdefault("sanitized_output", None)
 st.session_state.setdefault("sanitized_filename", None)
 
-st.title("DocuGuard")
-st.subheader("Local Privacy Layer for AI Workflows")
-st.info(
-    "Processing happens locally. DocuGuard does not send your input to an "
-    "external AI service."
+st.html(
+    """
+    <style>
+        :root { color-scheme: dark; }
+        [data-testid="stAppViewContainer"], [data-testid="stHeader"] {
+            background: #0b1016;
+        }
+        [data-testid="stMainBlockContainer"] {
+            max-width: 1080px;
+            padding-top: 1.5rem;
+            padding-bottom: 2rem;
+        }
+        [data-testid="stAppViewContainer"] {
+            color: #e6edf3;
+        }
+        [data-testid="stAppViewContainer"] h1,
+        [data-testid="stAppViewContainer"] h2,
+        [data-testid="stAppViewContainer"] h3,
+        [data-testid="stAppViewContainer"] p,
+        [data-testid="stAppViewContainer"] label {
+            color: #e6edf3;
+        }
+        .st-key-hero { padding: 0 0 0.25rem; }
+        .dg-eyebrow {
+            color: #67d9f3;
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 0.16em;
+            margin-bottom: 0.35rem;
+        }
+        .dg-brand-lockup {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 0.45rem;
+        }
+        .dg-monogram {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 2.6rem;
+            height: 2.6rem;
+            color: #dff8ff;
+            background: #0b5f8a;
+            border: 1px solid #35c3e5;
+            border-radius: 0.65rem;
+            font-weight: 800;
+            letter-spacing: 0.04em;
+        }
+        .dg-wordmark {
+            color: #f3f7fb;
+            font-size: 2.25rem;
+            font-weight: 750;
+            line-height: 1;
+        }
+        .st-key-privacy_engine {
+            background: #0f1720;
+            border-color: #2a3b4d;
+            border-radius: 0.8rem;
+        }
+        .dg-engine-title {
+            color: #9fb0c2;
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 0.14em;
+            margin-bottom: 0.55rem;
+        }
+        .dg-active-line {
+            display: flex;
+            align-items: center;
+            gap: 0.45rem;
+            color: #7ee2b8;
+            font-size: 0.78rem;
+            font-weight: 750;
+            letter-spacing: 0.08em;
+        }
+        .dg-active-dot {
+            width: 0.55rem;
+            height: 0.55rem;
+            background: #34d399;
+            border-radius: 50%;
+            box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.35);
+            animation: dg-pulse 2.2s ease-out infinite;
+        }
+        @keyframes dg-pulse {
+            0%, 45% { box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.3); }
+            75%, 100% { box-shadow: 0 0 0 0.4rem rgba(52, 211, 153, 0); }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .dg-active-dot { animation: none; }
+        }
+        .st-key-workflow_strip {
+            background: #0f1720;
+            border: 1px solid #30445a;
+            border-radius: 0.75rem;
+            padding: 0.5rem 0.8rem;
+            margin-bottom: 0.75rem;
+        }
+        .st-key-restore_workflow {
+            background: #0d141c;
+            border: 1px solid #233140;
+            border-radius: 0.7rem;
+            padding: 0.4rem 0.65rem;
+            margin-top: 0.5rem;
+            margin-bottom: 0.55rem;
+            opacity: 0.9;
+        }
+        .st-key-input_section,
+        .st-key-restore_section {
+            background: #111821;
+            border-radius: 0.75rem;
+        }
+        .st-key-detects_row {
+            padding: 0.15rem 0 0.45rem;
+        }
+        .st-key-primary_sanitize button {
+            min-height: 3rem;
+            min-width: 15rem;
+            font-weight: 700;
+            color: #f8fafc;
+            background: #0878b9;
+            border-color: #22b8df;
+        }
+        .st-key-primary_sanitize button:hover {
+            color: #ffffff;
+            background: #096b9f;
+            border-color: #67d9f3;
+        }
+        .st-key-protection_status {
+            background: #0e211c;
+            border: 1px solid #236a53;
+            border-left: 4px solid #34d399;
+            border-radius: 0.75rem;
+        }
+        .st-key-original_panel {
+            background: #151216;
+            border: 1px solid #743840;
+            border-left: 4px solid #ef6b73;
+            border-radius: 0.75rem;
+        }
+        .st-key-protected_panel {
+            background: #0d171b;
+            border: 1px solid #266577;
+            border-left: 4px solid #22b8cf;
+            border-radius: 0.75rem;
+        }
+        .st-key-footer_note {
+            margin-top: 1.5rem;
+            padding-top: 1rem;
+            border-top: 1px solid #273241;
+        }
+    </style>
+    """
 )
 
-uploaded_file = st.file_uploader(
-    "Upload a file (optional)",
-    type=["txt", "py", "json"],
-    key="uploaded_file",
-    on_change=clear_active_file,
-    max_upload_size=2,
-)
-st.caption(
-    "Files are processed locally in memory and are not uploaded to an "
-    "external service."
-)
+with st.container(key="hero"):
+    hero_copy, hero_status = st.columns([1.45, 1], vertical_alignment="center")
 
-if uploaded_file is not None:
-    uploaded_text, upload_error = read_uploaded_file(uploaded_file)
-
-    if upload_error:
-        st.error(upload_error)
-    else:
-        st.caption(
-            f"Selected file: {uploaded_file.name} "
-            f"({uploaded_file.size:,} bytes)"
+    with hero_copy:
+        st.html(
+            """
+            <div class="dg-eyebrow">DOCUGUARD</div>
+            <div class="dg-brand-lockup">
+                <span class="dg-monogram">DG</span>
+                <span class="dg-wordmark">DocuGuard</span>
+            </div>
+            """
         )
-        st.caption("Preview (first 500 characters)")
-        preview = uploaded_text[:500] or "(File is empty.)"
-        st.code(preview, language=None)
+        st.subheader("Local Privacy Layer for AI Workflows")
+        st.write(
+            "Protect sensitive code, credentials, logs and documents before "
+            "sharing them with cloud AI."
+        )
 
-        if st.button("Use Uploaded File"):
-            st.session_state["source_text"] = uploaded_text
-            st.session_state["active_input_name"] = uploaded_file.name
+    with hero_status:
+        with st.container(border=True, key="privacy_engine"):
+            st.html(
+                """
+                <div class="dg-engine-title">PRIVACY ENGINE</div>
+                <div class="dg-active-line">
+                    <span class="dg-active-dot"></span>
+                    <span>ACTIVE</span>
+                </div>
+                """
+            )
+            st.markdown(
+                "**Processing:** LOCAL  \n"
+                "**External Requests:** 0  \n"
+                "**Mapping:** SESSION ONLY  \n"
+                "**Supported:** TXT · PY · JSON"
+            )
 
-if st.session_state["active_input_name"]:
-    st.success(
-        f'Active input: uploaded file "{st.session_state["active_input_name"]}"'
+with st.container(
+    horizontal=True,
+    vertical_alignment="center",
+    key="workflow_strip",
+):
+    st.badge("INPUT", color="gray")
+    st.markdown("→")
+    st.badge("DETECT", color="blue")
+    st.markdown("→")
+    st.badge("ANONYMIZE", color="blue")
+    st.markdown("→")
+    st.badge("AI-SAFE", color="green")
+    st.markdown("→")
+    st.badge("RESTORE", color="gray")
+
+st.subheader("1. Add Content")
+st.caption("Paste content below or upload a supported text file.")
+
+with st.container(border=True, key="input_section"):
+    with st.container(
+        horizontal=True,
+        vertical_alignment="center",
+        key="detects_row",
+    ):
+        st.caption("DETECTS")
+        st.badge("Email", color="gray")
+        st.badge("IPv4", color="gray")
+        st.badge("Passwords", color="gray")
+        st.badge("API Keys", color="gray")
+        st.badge("Tokens", color="gray")
+
+    uploaded_file = st.file_uploader(
+        "Upload a file (optional)",
+        type=["txt", "py", "json"],
+        key="uploaded_file",
+        on_change=clear_active_file,
+        max_upload_size=2,
+    )
+    st.caption(
+        "Files are processed locally in memory and are not uploaded to an "
+        "external service."
     )
 
-source_text = st.text_area(
-    "Source code, logs, credentials, or text",
-    height=320,
-    placeholder="Paste sensitive content here...",
-    key="source_text",
-    on_change=clear_active_file,
-)
+    if uploaded_file is not None:
+        uploaded_text, upload_error = read_uploaded_file(uploaded_file)
 
-sanitized_this_run = False
-if st.button("Sanitize", type="primary"):
+        if upload_error:
+            st.error(upload_error)
+        else:
+            st.caption(
+                f"Selected file: {uploaded_file.name} "
+                f"({uploaded_file.size:,} bytes)"
+            )
+            st.caption("Preview (first 500 characters)")
+            preview = uploaded_text[:500] or "(File is empty.)"
+            st.code(preview, language=None)
+
+            if st.button("Use Uploaded File"):
+                st.session_state["source_text"] = uploaded_text
+                st.session_state["active_input_name"] = uploaded_file.name
+
+    if st.session_state["active_input_name"]:
+        st.success(
+            f'Active input: uploaded file "{st.session_state["active_input_name"]}"'
+        )
+
+    st.caption("OR PASTE CONTENT")
+    source_text = st.text_area(
+        "Source code, logs, credentials, or text",
+        height=260,
+        placeholder="Paste sensitive content here...",
+        key="source_text",
+        on_change=clear_active_file,
+    )
+
+with st.container(horizontal=True, key="primary_action"):
+    sanitize_clicked = st.button(
+        "Sanitize & Protect",
+        type="primary",
+        key="primary_sanitize",
+        width="content",
+    )
+
+if sanitize_clicked:
     if not source_text.strip():
         st.warning("Enter some text to sanitize.")
     else:
-        sanitized_text, detection_counts, placeholder_mapping = sanitize_text(
-            source_text
-        )
+        with st.spinner("Scanning locally for sensitive data...", show_time=False):
+            sanitized_text, detection_counts, placeholder_mapping = sanitize_text(
+                source_text
+            )
         st.session_state["placeholder_mapping"] = placeholder_mapping
         st.session_state["sanitized_output"] = sanitized_text
         st.session_state["sanitized_filename"] = sanitized_filename_for(
             st.session_state["active_input_name"]
         )
-        sanitized_this_run = True
+        total_entities = sum(detection_counts.values())
+        categories_detected = sum(
+            count > 0 for count in detection_counts.values()
+        )
 
-        st.subheader("Detection counts")
+        with st.container(border=True, key="protection_status"):
+            st.success(
+                f"{total_entities} sensitive entities neutralized · "
+                "0 external requests",
+                title="✓ Content Protected",
+            )
+            with st.container(horizontal=True, key="security_metrics"):
+                st.metric(
+                    "Categories Detected", categories_detected, border=True
+                )
+                st.metric("Local Processing", "100%", border=True)
+                st.metric("External Requests", 0, border=True)
+
+        st.subheader("2. Detection Summary")
+        st.caption("DETAILED DETECTIONS")
         email_column, ipv4_column, password_column, api_key_column = st.columns(4)
         email_column.metric("Email", detection_counts["Email"])
         ipv4_column.metric("IPv4", detection_counts["IPv4"])
-        password_column.metric("Password", detection_counts["Password"])
+        password_column.metric(
+            "Password", detection_counts["Password"]
+        )
         api_key_column.metric(
-            "API Key / Token", detection_counts["API Key / Token"]
+            "API Key / Token",
+            detection_counts["API Key / Token"],
         )
 
-        if sum(detection_counts.values()) == 0:
+        if total_entities == 0:
             st.info("No sensitive information detected.")
 
-        original_column, sanitized_column = st.columns(2)
+if st.session_state["sanitized_output"] is not None:
+    st.subheader("3. Sanitized Result")
+    original_column, protected_column = st.columns(2)
 
-        with original_column:
-            st.subheader("Original")
+    with original_column:
+        with st.container(border=True, key="original_panel"):
+            st.markdown("#### Original")
+            st.badge("SENSITIVE", color="red")
             st.code(source_text, language=None)
 
-        with sanitized_column:
-            st.subheader("Sanitized")
-            st.code(sanitized_text, language=None)
+    with protected_column:
+        with st.container(border=True, key="protected_panel"):
+            st.markdown("#### Protected")
+            st.badge("AI-SAFE", color="green")
+            st.code(st.session_state["sanitized_output"], language=None)
+            st.download_button(
+                "Download Sanitized File",
+                data=st.session_state["sanitized_output"],
+                file_name=st.session_state["sanitized_filename"],
+                mime=mime_type_for(st.session_state["sanitized_filename"]),
+                key="download_sanitized",
+                on_click="ignore",
+            )
 
-if st.session_state["sanitized_output"] is not None:
-    if not sanitized_this_run:
-        st.subheader("Sanitized")
-        st.code(st.session_state["sanitized_output"], language=None)
+with st.container(
+    horizontal=True,
+    vertical_alignment="center",
+    key="restore_workflow",
+):
+    st.badge("Sanitized Prompt", color="blue")
+    st.markdown("→")
+    st.badge("External AI", color="gray")
+    st.markdown("→")
+    st.badge("Placeholder Response", color="blue")
+    st.markdown("→")
+    st.badge("Local Restore", color="green")
 
-    st.download_button(
-        "Download Sanitized File",
-        data=st.session_state["sanitized_output"],
-        file_name=st.session_state["sanitized_filename"],
-        mime=mime_type_for(st.session_state["sanitized_filename"]),
-        on_click="ignore",
+st.subheader("4. Restore AI Response")
+with st.container(border=True, key="restore_section"):
+    st.caption(
+        "Paste the AI response containing DocuGuard placeholders to restore "
+        "your original values locally."
+    )
+    st.caption(
+        "🔒 Restoration uses only the temporary mapping stored in this session."
     )
 
-st.divider()
-st.subheader("Restore AI Response")
-st.caption(
-    "Paste an AI response containing DocuGuard placeholders to restore the "
-    "original values locally."
-)
-st.caption("Restoration happens locally using the current session mapping.")
+    ai_response = st.text_area(
+        "AI response",
+        height=200,
+        placeholder="Paste an AI response with DocuGuard placeholders here...",
+    )
 
-ai_response = st.text_area(
-    "AI response",
-    height=200,
-    placeholder="Paste an AI response with DocuGuard placeholders here...",
-)
+    if st.button("Restore Original Values"):
+        current_mapping = st.session_state.get("placeholder_mapping", {})
 
-if st.button("Restore Original Values"):
-    current_mapping = st.session_state.get("placeholder_mapping", {})
+        if not current_mapping:
+            st.warning(
+                "Sanitize some content first to create a restoration mapping."
+            )
+        elif not ai_response.strip():
+            st.warning("Enter an AI response to restore.")
+        else:
+            restored_text = restore_text(ai_response, current_mapping)
+            st.success("✓ Original values restored locally")
+            st.subheader("Restored Response")
+            st.code(restored_text, language=None)
 
-    if not current_mapping:
-        st.warning("Sanitize some content first to create a restoration mapping.")
-    elif not ai_response.strip():
-        st.warning("Enter an AI response to restore.")
-    else:
-        restored_text = restore_text(ai_response, current_mapping)
-        st.subheader("Restored Response")
-        st.code(restored_text, language=None)
+with st.container(key="footer_note"):
+    st.markdown("**DocuGuard · Local-first privacy for AI workflows**")
+    st.caption("Built for Grevix AfterCode")
+    st.caption(
+        "No external AI or cloud API is contacted by DocuGuard."
+    )
