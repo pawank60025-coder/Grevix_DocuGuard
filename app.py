@@ -42,29 +42,30 @@ ASSIGNMENT_PATTERN = re.compile(
 
 
 def sanitize_text(text):
-    """Replace supported sensitive values and return the text plus match counts."""
+    """Replace sensitive values and return text, counts, and a restore mapping."""
     counts = {
         "Email": 0,
         "IPv4": 0,
         "Password": 0,
         "API Key / Token": 0,
     }
-    value_mappings = {
+    value_to_placeholder = {
         "Email": {},
         "IPv4": {},
         "Password": {},
         "API Key / Token": {},
     }
+    placeholder_mapping = {}
 
     def placeholder_for(category, placeholder_name, value):
         """Return one stable placeholder for each unique sensitive value."""
-        category_mapping = value_mappings[category]
+        category_mapping = value_to_placeholder[category]
 
         if value not in category_mapping:
             counts[category] += 1
-            category_mapping[value] = (
-                f"[{placeholder_name}_{counts[category]}]"
-            )
+            placeholder = f"[{placeholder_name}_{counts[category]}]"
+            category_mapping[value] = placeholder
+            placeholder_mapping[placeholder] = value
 
         return category_mapping[value]
 
@@ -112,10 +113,26 @@ def sanitize_text(text):
     sanitized = EMAIL_PATTERN.sub(replace_email, sanitized)
     sanitized = IPV4_PATTERN.sub(replace_ipv4, sanitized)
 
-    return sanitized, counts
+    return sanitized, counts, placeholder_mapping
+
+
+def restore_text(text, mapping):
+    """Restore only placeholders found in the current session mapping."""
+    if not mapping:
+        return text
+
+    # One regex pass prevents restored values from being processed a second time.
+    placeholder_pattern = re.compile(
+        "|".join(re.escape(placeholder) for placeholder in mapping)
+    )
+    return placeholder_pattern.sub(
+        lambda match: mapping[match.group(0)],
+        text,
+    )
 
 
 st.set_page_config(page_title="DocuGuard", layout="wide")
+st.session_state.setdefault("placeholder_mapping", {})
 
 st.title("DocuGuard")
 st.subheader("Local Privacy Layer for AI Workflows")
@@ -134,7 +151,10 @@ if st.button("Sanitize", type="primary"):
     if not source_text.strip():
         st.warning("Enter some text to sanitize.")
     else:
-        sanitized_text, detection_counts = sanitize_text(source_text)
+        sanitized_text, detection_counts, placeholder_mapping = sanitize_text(
+            source_text
+        )
+        st.session_state["placeholder_mapping"] = placeholder_mapping
 
         st.subheader("Detection counts")
         email_column, ipv4_column, password_column, api_key_column = st.columns(4)
@@ -157,3 +177,29 @@ if st.button("Sanitize", type="primary"):
         with sanitized_column:
             st.subheader("Sanitized")
             st.code(sanitized_text, language=None)
+
+st.divider()
+st.subheader("Restore AI Response")
+st.caption(
+    "Paste an AI response containing DocuGuard placeholders to restore the "
+    "original values locally."
+)
+st.caption("Restoration happens locally using the current session mapping.")
+
+ai_response = st.text_area(
+    "AI response",
+    height=200,
+    placeholder="Paste an AI response with DocuGuard placeholders here...",
+)
+
+if st.button("Restore Original Values"):
+    current_mapping = st.session_state.get("placeholder_mapping", {})
+
+    if not current_mapping:
+        st.warning("Sanitize some content first to create a restoration mapping.")
+    elif not ai_response.strip():
+        st.warning("Enter an AI response to restore.")
+    else:
+        restored_text = restore_text(ai_response, current_mapping)
+        st.subheader("Restored Response")
+        st.code(restored_text, language=None)
