@@ -3,6 +3,9 @@ import re
 import streamlit as st
 
 
+MAX_FILE_SIZE_BYTES = 2 * 1024 * 1024
+SUPPORTED_FILE_EXTENSIONS = (".txt", ".py", ".json")
+
 EMAIL_PATTERN = re.compile(
     r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b"
 )
@@ -15,20 +18,20 @@ IPV4_PATTERN = re.compile(
 
 ASSIGNMENT_PATTERN = re.compile(
     r"""
-    (?P<name>
-        \b(?:
-            (?:[A-Za-z][A-Za-z0-9_]*_)?(?:password|passwd|pwd)
-            |api[_-]key
-            |secret_key
-            |api_secret
-            |auth_token
-            |private_key
-            |access_token
-            |token
-            |secret
-        )\b
+    (?P<prefix>
+        (?P<key_quote>["']?)
+        (?P<name>
+            \b(?:
+                (?:[A-Za-z][A-Za-z0-9_]*_)?(?:password|passwd|pwd)
+                |api[_-]key
+                |secret_key
+                |private_key
+                |(?:[A-Za-z][A-Za-z0-9_]*_)?(?:token|secret)
+            )\b
+        )
+        (?P=key_quote)
+        (?P<separator>[ \t]*(?:=|:)[ \t]*)
     )
-    (?P<equals>[ \t]*=[ \t]*)
     (?:
         "(?P<double_value>(?:\\.|[^"\\\r\n])+)"
         |
@@ -90,10 +93,7 @@ def sanitize_text(text):
             placeholder_name = "API_KEY"
 
         placeholder = placeholder_for(category, placeholder_name, value)
-        return (
-            f'{variable_name}{match.group("equals")}'
-            f"{quote}{placeholder}{quote}"
-        )
+        return f'{match.group("prefix")}{quote}{placeholder}{quote}'
 
     def replace_email(match):
         email = match.group(0)
@@ -131,8 +131,33 @@ def restore_text(text, mapping):
     )
 
 
+def read_uploaded_file(uploaded_file):
+    """Validate and decode an uploaded text file without saving it to disk."""
+    if not uploaded_file.name.lower().endswith(SUPPORTED_FILE_EXTENSIONS):
+        return None, "Unsupported file type. Upload a .txt, .py, or .json file."
+
+    if uploaded_file.size > MAX_FILE_SIZE_BYTES:
+        return None, "File is larger than 2 MB. Choose a smaller file."
+
+    file_bytes = uploaded_file.getvalue()
+    if len(file_bytes) > MAX_FILE_SIZE_BYTES:
+        return None, "File is larger than 2 MB. Choose a smaller file."
+
+    try:
+        return file_bytes.decode("utf-8-sig"), None
+    except UnicodeDecodeError:
+        return None, "Unable to read this file as UTF-8 text."
+
+
+def clear_active_file():
+    """Mark the text area as manual input after the user changes a widget."""
+    st.session_state["active_input_name"] = None
+
+
 st.set_page_config(page_title="DocuGuard", layout="wide")
 st.session_state.setdefault("placeholder_mapping", {})
+st.session_state.setdefault("source_text", "")
+st.session_state.setdefault("active_input_name", None)
 
 st.title("DocuGuard")
 st.subheader("Local Privacy Layer for AI Workflows")
@@ -141,10 +166,47 @@ st.info(
     "external AI service."
 )
 
+uploaded_file = st.file_uploader(
+    "Upload a file (optional)",
+    type=["txt", "py", "json"],
+    key="uploaded_file",
+    on_change=clear_active_file,
+    max_upload_size=2,
+)
+st.caption(
+    "Files are processed locally in memory and are not uploaded to an "
+    "external service."
+)
+
+if uploaded_file is not None:
+    uploaded_text, upload_error = read_uploaded_file(uploaded_file)
+
+    if upload_error:
+        st.error(upload_error)
+    else:
+        st.caption(
+            f"Selected file: {uploaded_file.name} "
+            f"({uploaded_file.size:,} bytes)"
+        )
+        st.caption("Preview (first 500 characters)")
+        preview = uploaded_text[:500] or "(File is empty.)"
+        st.code(preview, language=None)
+
+        if st.button("Use Uploaded File"):
+            st.session_state["source_text"] = uploaded_text
+            st.session_state["active_input_name"] = uploaded_file.name
+
+if st.session_state["active_input_name"]:
+    st.success(
+        f'Active input: uploaded file "{st.session_state["active_input_name"]}"'
+    )
+
 source_text = st.text_area(
     "Source code, logs, credentials, or text",
     height=320,
     placeholder="Paste sensitive content here...",
+    key="source_text",
+    on_change=clear_active_file,
 )
 
 if st.button("Sanitize", type="primary"):
