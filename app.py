@@ -149,6 +149,36 @@ def read_uploaded_file(uploaded_file):
         return None, "Unable to read this file as UTF-8 text."
 
 
+def sanitized_filename_for(source_name):
+    """Build a safe download name while preserving a supported file type."""
+    if not source_name:
+        return "docuguard_sanitized.txt"
+
+    base_name = source_name.replace("\\", "/").split("/")[-1]
+    if "." not in base_name:
+        return "docuguard_sanitized.txt"
+
+    stem, extension = base_name.rsplit(".", 1)
+    extension = extension.lower()
+    if f".{extension}" not in SUPPORTED_FILE_EXTENSIONS:
+        return "docuguard_sanitized.txt"
+
+    safe_stem = re.sub(r"[^A-Za-z0-9._-]+", "_", stem).strip("._")
+    if not safe_stem:
+        safe_stem = "file"
+
+    return f"sanitized_{safe_stem}.{extension}"
+
+
+def mime_type_for(filename):
+    """Return the download MIME type for a sanitized text file."""
+    if filename.lower().endswith(".py"):
+        return "text/x-python"
+    if filename.lower().endswith(".json"):
+        return "application/json"
+    return "text/plain"
+
+
 def clear_active_file():
     """Mark the text area as manual input after the user changes a widget."""
     st.session_state["active_input_name"] = None
@@ -158,6 +188,8 @@ st.set_page_config(page_title="DocuGuard", layout="wide")
 st.session_state.setdefault("placeholder_mapping", {})
 st.session_state.setdefault("source_text", "")
 st.session_state.setdefault("active_input_name", None)
+st.session_state.setdefault("sanitized_output", None)
+st.session_state.setdefault("sanitized_filename", None)
 
 st.title("DocuGuard")
 st.subheader("Local Privacy Layer for AI Workflows")
@@ -209,6 +241,7 @@ source_text = st.text_area(
     on_change=clear_active_file,
 )
 
+sanitized_this_run = False
 if st.button("Sanitize", type="primary"):
     if not source_text.strip():
         st.warning("Enter some text to sanitize.")
@@ -217,6 +250,11 @@ if st.button("Sanitize", type="primary"):
             source_text
         )
         st.session_state["placeholder_mapping"] = placeholder_mapping
+        st.session_state["sanitized_output"] = sanitized_text
+        st.session_state["sanitized_filename"] = sanitized_filename_for(
+            st.session_state["active_input_name"]
+        )
+        sanitized_this_run = True
 
         st.subheader("Detection counts")
         email_column, ipv4_column, password_column, api_key_column = st.columns(4)
@@ -239,6 +277,19 @@ if st.button("Sanitize", type="primary"):
         with sanitized_column:
             st.subheader("Sanitized")
             st.code(sanitized_text, language=None)
+
+if st.session_state["sanitized_output"] is not None:
+    if not sanitized_this_run:
+        st.subheader("Sanitized")
+        st.code(st.session_state["sanitized_output"], language=None)
+
+    st.download_button(
+        "Download Sanitized File",
+        data=st.session_state["sanitized_output"],
+        file_name=st.session_state["sanitized_filename"],
+        mime=mime_type_for(st.session_state["sanitized_filename"]),
+        on_click="ignore",
+    )
 
 st.divider()
 st.subheader("Restore AI Response")
