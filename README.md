@@ -4,6 +4,10 @@
 
 DocuGuard helps developers and knowledge workers sanitize sensitive information before sharing code, logs, configuration files, or text with cloud AI systems.
 
+## Demo
+
+![DocuGuard sanitization workflow](assets/docuguard-demo.png)
+
 ## Problem
 
 Developers often paste source code, credentials, API keys, internal IP addresses, emails, logs, and configuration data into AI assistants. This can unintentionally expose private, proprietary, or security-sensitive information.
