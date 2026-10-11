@@ -1,6 +1,6 @@
 # DocuGuard
 
-> Local-first sensitive data anonymization for safer AI workflows.
+> Session-scoped sensitive data anonymization for safer AI workflows.
 
 DocuGuard helps developers and knowledge workers sanitize sensitive information before sharing code, logs, configuration files, or text with cloud AI systems.
 
@@ -14,11 +14,11 @@ Developers often paste source code, credentials, API keys, internal IP addresses
 
 ## Solution
 
-DocuGuard provides a local sanitization and restoration workflow:
+DocuGuard provides a session-based sanitization and restoration workflow:
 
-**Input → Detect → Anonymize → AI-safe content → optional external AI processing → placeholder response → local restoration**
+**Input → Detect → Anonymize → AI-safe content → optional external AI processing → placeholder response → session restoration**
 
-DocuGuard replaces detected values with stable placeholders before the user shares the sanitized content. If an AI response contains those placeholders, DocuGuard can restore the original values locally using the current session mapping.
+DocuGuard replaces detected values with stable placeholders before the user shares the sanitized content. If an AI response contains those placeholders, DocuGuard can restore the original values within the current Streamlit session.
 
 DocuGuard itself does **not** call an external AI API. Sending sanitized content to an AI is a separate, user-controlled step outside the application.
 
@@ -32,8 +32,8 @@ DocuGuard itself does **not** call an external AI API. Sending sanitized content
 - JSON-style credential fields
 - Stable numbered placeholders
 - Identical values reuse the same placeholder
-- Local reversible placeholder mapping
-- Local restoration of AI responses
+- Session-scoped reversible placeholder mapping
+- Session-scoped restoration of AI responses
 - Manual text input
 - `.txt`, `.py`, and `.json` file uploads
 - 2 MB file limit
@@ -44,7 +44,7 @@ DocuGuard itself does **not** call an external AI API. Sending sanitized content
 - Freshness Guard for action-triggered local-file verification
 - SHA-256 content fingerprinting for monitored `.txt`, `.py`, and `.json` files
 - Session-only sensitive mapping
-- No external AI or API calls
+- No outbound AI/API requests made by DocuGuard
 
 ## Why DocuGuard
 
@@ -57,7 +57,7 @@ Many redaction tools permanently remove sensitive values. DocuGuard instead crea
 [API_KEY_1]
 ```
 
-These placeholders preserve relationships in the sanitized content. An external AI can refer to the same placeholder consistently, and DocuGuard can restore recognized placeholders in the response locally afterward.
+These placeholders preserve relationships in the sanitized content. An external AI can refer to the same placeholder consistently, and DocuGuard can restore recognized placeholders in the response within the same Streamlit session afterward.
 
 DocuGuard is a focused hackathon MVP, not a production-grade enterprise security product.
 
@@ -65,10 +65,10 @@ DocuGuard is a focused hackathon MVP, not a production-grade enterprise security
 
 ```mermaid
 flowchart TD
-    A[User input<br/>Manual paste or text file] --> B[Local detection engine<br/>Python regex]
+    A[User input<br/>Manual paste or text file] --> B[In-app detection engine<br/>Python regex]
     B --> C[Session-only placeholder mapping]
     B --> D[Sanitized output]
-    C --> G[Local restoration]
+    C --> G[Session restoration]
     D -. User may send sanitized text .-> E[External AI<br/>Optional and outside DocuGuard]
     E -. Placeholder response .-> F[Response pasted into DocuGuard]
     F --> G
@@ -77,18 +77,18 @@ flowchart TD
 
 The external AI step is optional and is **not initiated by DocuGuard**.
 
-## Local-First Privacy Model
+## Deployment and Privacy Model
 
-The current hackathon version is designed to run locally with Streamlit:
+DocuGuard can run locally or on a hosted Streamlit deployment:
 
-- Detection and substitution occur in the running local application.
+- Detection and substitution occur in the running Streamlit process. Locally, that process is on the user's machine; on a hosted deployment, it is on the host server.
 - Placeholder mappings are held only in Streamlit session state.
 - Mappings are not written to disk.
-- Uploaded text files are processed in memory.
+- Browser uploads are sent to the selected Streamlit deployment and processed in memory.
 - Uploaded Python files are treated as text and are never executed.
-- DocuGuard makes no external AI or API requests.
+- DocuGuard makes no outbound AI/API requests.
 
-These privacy statements describe the current localhost execution model. If the application is later deployed to a remote server, uploaded and pasted content would be processed by that server rather than exclusively on the user's device.
+The hosted demo therefore processes pasted and uploaded content on its Streamlit server. It does not imply that browser-to-server traffic is absent or that hosted processing occurs exclusively on the visitor's device.
 
 ## Supported Input
 
@@ -104,7 +104,7 @@ The maximum file size is **2 MB**. Files are decoded as UTF-8, including UTF-8 w
 
 The original workflow assumed that a local file had not changed since it was sanitized. During active development or interrupted work, that assumption can leave the protected output, detection counts, download, and reversible mapping out of date.
 
-Freshness Guard adds optional local-path monitoring for `.txt`, `.py`, and `.json` files that the running Streamlit process can access. Monitored files retain the existing 2 MB limit and UTF-8/UTF-8 BOM decoding rules. Python and JSON content remains raw text and is never executed or evaluated.
+Freshness Guard adds optional local-path monitoring for `.txt`, `.py`, and `.json` files that the running Streamlit process can access. It is designed for local or self-hosted execution. The public hosted demo cannot monitor files on a visitor's computer, and browser uploads remain snapshots. Monitored files retain the existing 2 MB limit and UTF-8/UTF-8 BOM decoding rules. Python and JSON content remains raw text and is never executed or evaluated.
 
 DocuGuard reads the latest content and compares its SHA-256 fingerprint with the fingerprint of the sanitized version. A check occurs when the user selects **Check for Changes**, before sanitization while monitoring is active, and before preparing a monitored sanitized download. If the content changed, DocuGuard reloads and sanitizes the latest version, updates the detection counts and download, replaces the previous session mapping, and returns the Current State to **FRESH**. The separate Last Event records what happened, including **File loaded and monitored**, **No changes detected**, **Change detected → latest version reprocessed**, or **Monitored file unavailable**.
 
@@ -150,7 +150,7 @@ Example AI response:
 Send the report to [EMAIL_1] after checking [IPV4_1].
 ```
 
-Restored locally:
+Restored in the current session:
 
 ```text
 Send the report to pawan@example.com after checking 192.168.1.105.
@@ -236,7 +236,7 @@ Development proceeded through incremental Git commits, targeted fixes, manual va
 - PDF and DOCX parsing are not supported.
 - The reversible mapping exists only during the current Streamlit session.
 - There is no direct LLM integration.
-- The local-first privacy claim assumes local execution of the Streamlit app.
+- Hosted deployments process pasted and uploaded content on the host server, not exclusively on the visitor's device.
 - Freshness monitoring works only when the running Streamlit process can access the specified filesystem path.
 - Browser uploads are snapshots and cannot be re-read through Freshness Guard.
 - Freshness checks are action-triggered; there is no continuous background monitoring or operating-system-level file watcher.

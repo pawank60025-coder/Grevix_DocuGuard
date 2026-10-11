@@ -671,7 +671,7 @@ with st.container(key="hero"):
             </div>
             """
         )
-        st.subheader("Local Privacy Layer for AI Workflows")
+        st.subheader("Privacy Layer for AI Workflows")
         st.write(
             "Protect sensitive code, credentials, logs and documents before "
             "sharing them with cloud AI."
@@ -689,8 +689,7 @@ with st.container(key="hero"):
                 """
             )
             st.markdown(
-                "**Processing:** LOCAL  \n"
-                "**External Requests:** 0  \n"
+                "**External AI/API Requests:** 0  \n"
                 "**Mapping:** SESSION ONLY  \n"
                 "**Supported:** TXT · PY · JSON"
             )
@@ -727,13 +726,16 @@ with st.container(border=True, key="input_section"):
         st.badge("Tokens", color="gray")
 
     with st.container(border=True, key="freshness_guard"):
-        st.markdown("#### Freshness Guard")
-        st.caption(
-            "Monitor a local text file and detect when its contents change "
-            "after sanitization. Localhost use only."
+        st.markdown("#### Freshness Guard — Local / self-hosted mode")
+        st.info(
+            "Freshness Guard monitors files accessible to the running "
+            "Streamlit process. The hosted demo cannot access files on your "
+            "computer. Browser uploads are snapshots and cannot be monitored "
+            "for later changes.",
+            icon=":material/info:",
         )
         monitored_path_input = st.text_input(
-            "Local file path",
+            "Local / self-hosted file path",
             placeholder=r"C:\Projects\app\config.py",
             key="monitored_path_input",
         )
@@ -807,8 +809,8 @@ with st.container(border=True, key="input_section"):
         max_upload_size=2,
     )
     st.caption(
-        "Files are processed locally in memory and are not uploaded to an "
-        "external service."
+        "Browser uploads are sent to this Streamlit app for in-memory "
+        "processing. DocuGuard does not forward them to an external AI/API."
     )
 
     if uploaded_file is not None:
@@ -870,7 +872,10 @@ if sanitize_clicked:
     elif not source_text.strip():
         st.warning("Enter some text to sanitize.")
     else:
-        with st.spinner("Scanning locally for sensitive data...", show_time=False):
+        with st.spinner(
+            "Scanning in this Streamlit session for sensitive data...",
+            show_time=False,
+        ):
             source_fingerprint = None
             if st.session_state["monitored_file_path"]:
                 source_fingerprint = st.session_state[
@@ -905,7 +910,7 @@ if detection_counts is not None and monitored_result_is_current:
 
     with st.container(border=True, key="privacy_report"):
         st.subheader("2. Privacy Report")
-        st.caption("EXPLAINABLE LOCAL ASSESSMENT")
+        st.caption("EXPLAINABLE SESSION ASSESSMENT")
 
         risk_column, explanation_column = st.columns(
             [1, 2.4], vertical_alignment="center"
@@ -923,8 +928,8 @@ if detection_counts is not None and monitored_result_is_current:
                 total_entities,
                 border=True,
             )
-            st.metric("Local Processing", "100%", border=True)
-            st.metric("External Requests", 0, border=True)
+            st.metric("Session Mapping", "Session only", border=True)
+            st.metric("External AI/API Requests", 0, border=True)
 
         st.caption("DETECTED CATEGORIES")
         with st.container(horizontal=True, key="category_counts"):
@@ -999,13 +1004,13 @@ with st.container(
     st.markdown("→")
     st.badge("Placeholder Response", color="blue")
     st.markdown("→")
-    st.badge("Local Restore", color="green")
+    st.badge("Session Restore", color="green")
 
 st.subheader("4. Restore AI Response")
 with st.container(border=True, key="restore_section"):
     st.caption(
         "Paste the AI response containing DocuGuard placeholders to restore "
-        "your original values locally."
+        "your original values within this Streamlit session."
     )
     st.caption(
         "🔒 Restoration uses only the temporary mapping stored in this session."
@@ -1028,13 +1033,13 @@ with st.container(border=True, key="restore_section"):
             st.warning("Enter an AI response to restore.")
         else:
             restored_text = restore_text(ai_response, current_mapping)
-            st.success("✓ Original values restored locally")
+            st.success("✓ Original values restored in this session")
             st.subheader("Restored Response")
             st.code(restored_text, language=None)
 
 with st.container(key="footer_note"):
-    st.markdown("**DocuGuard · Local-first privacy for AI workflows**")
+    st.markdown("**DocuGuard · Session-scoped privacy for AI workflows**")
     st.caption("Built for Grevix AfterCode")
     st.caption(
-        "No external AI or cloud API is contacted by DocuGuard."
+        "DocuGuard makes no outbound AI/API requests."
     )

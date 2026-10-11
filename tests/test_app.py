@@ -131,8 +131,8 @@ class StreamlitWorkflowRegressionTests(unittest.TestCase):
         self.assertEqual(metrics["IPv4"], "0")
         self.assertEqual(metrics["Password"], "1")
         self.assertEqual(metrics["API Key / Token"], "0")
-        self.assertEqual(metrics["Local Processing"], "100%")
-        self.assertEqual(metrics["External Requests"], "0")
+        self.assertEqual(metrics["Session Mapping"], "Session only")
+        self.assertEqual(metrics["External AI/API Requests"], "0")
         self.assertTrue(
             any(
                 markdown.value
@@ -151,6 +151,41 @@ class StreamlitWorkflowRegressionTests(unittest.TestCase):
 
         self.assertFalse(app_test.exception)
         self.assertEqual(app_test.code[-1].value, "Notify person@example.com.")
+
+    def test_hosted_safe_copy_keeps_local_monitoring_clearly_scoped(self):
+        app_test = self.new_app()
+
+        markdown_values = [element.value for element in app_test.markdown]
+        caption_values = [element.value for element in app_test.caption]
+        info_values = [element.value for element in app_test.info]
+
+        self.assertFalse(
+            any("Processing:** LOCAL" in value for value in markdown_values)
+        )
+        self.assertTrue(
+            any(
+                "External AI/API Requests:** 0" in value
+                for value in markdown_values
+            )
+        )
+        self.assertEqual(
+            app_test.text_input(key="monitored_path_input").label,
+            "Local / self-hosted file path",
+        )
+        self.assertTrue(
+            any(
+                "hosted demo cannot access files on your computer" in value
+                and "Browser uploads are snapshots" in value
+                for value in info_values
+            )
+        )
+        self.assertTrue(
+            any(
+                "Browser uploads are sent to this Streamlit app" in value
+                and "does not forward them to an external AI/API" in value
+                for value in caption_values
+            )
+        )
 
     def test_low_and_medium_reports(self):
         app_test = self.new_app()
