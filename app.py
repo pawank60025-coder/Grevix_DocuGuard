@@ -1,4 +1,7 @@
+import hashlib
 import re
+from datetime import datetime
+from pathlib import Path
 
 import streamlit as st
 
@@ -179,8 +182,274 @@ def mime_type_for(filename):
     return "text/plain"
 
 
+def read_local_text_file(file_path):
+    """Read a supported local file as UTF-8 text without executing it."""
+    cleaned_path = file_path.strip().strip('"')
+    if not cleaned_path:
+        return None, None, None, "Enter a local file path."
+
+    path = Path(cleaned_path)
+    if path.suffix.lower() not in SUPPORTED_FILE_EXTENSIONS:
+        return (
+            None,
+            None,
+            None,
+            "Unsupported file type. Choose a .txt, .py, or .json file.",
+        )
+
+    try:
+        if not path.is_file():
+            return None, None, None, "The local file could not be found."
+
+        file_size = path.stat().st_size
+        if file_size > MAX_FILE_SIZE_BYTES:
+            return None, None, None, "File is larger than 2 MB. Choose a smaller file."
+
+        file_bytes = path.read_bytes()
+        if len(file_bytes) > MAX_FILE_SIZE_BYTES:
+            return None, None, None, "File is larger than 2 MB. Choose a smaller file."
+
+        modified_time = path.stat().st_mtime
+    except OSError:
+        return None, None, None, "The local file could not be read."
+
+    try:
+        text = file_bytes.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        return None, None, None, "Unable to read this file as UTF-8 text."
+
+    try:
+        resolved_path = str(path.resolve())
+    except OSError:
+        resolved_path = str(path)
+
+    return text, resolved_path, modified_time, None
+
+
+def content_fingerprint(text):
+    """Return a SHA-256 fingerprint for decoded text content."""
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def time_label(timestamp=None):
+    """Format a local timestamp for the Freshness Guard status panel."""
+    if timestamp is None:
+        moment = datetime.now().astimezone()
+    else:
+        moment = datetime.fromtimestamp(timestamp).astimezone()
+    return moment.strftime("%Y-%m-%d %H:%M:%S %Z")
+
+
+def store_sanitized_result(text, source_name, source_fingerprint=None):
+    """Run the existing sanitizer and store its current-session results."""
+    sanitized_text, detection_counts, placeholder_mapping = sanitize_text(text)
+    st.session_state["placeholder_mapping"] = placeholder_mapping
+    st.session_state["sanitized_output"] = sanitized_text
+    st.session_state["sanitized_filename"] = sanitized_filename_for(source_name)
+    st.session_state["detection_counts"] = detection_counts
+
+    if source_fingerprint is not None:
+        st.session_state["monitored_sanitized_fingerprint"] = source_fingerprint
+
+
+def reset_monitoring_state():
+    """Stop monitoring when the user switches back to snapshot input."""
+    st.session_state["monitored_file_path"] = None
+    st.session_state["monitored_file_name"] = None
+    st.session_state["monitored_latest_fingerprint"] = None
+    st.session_state["monitored_sanitized_fingerprint"] = None
+    st.session_state["monitored_modified_time"] = None
+    st.session_state["monitored_last_checked"] = None
+    st.session_state["freshness_status"] = "NOT MONITORED"
+    st.session_state["freshness_notice"] = None
+    st.session_state["freshness_notice_level"] = "info"
+    st.session_state["monitor_action_error"] = None
+    st.session_state["monitored_download_ready"] = False
+
+
+def set_freshness_notice(message, level="info"):
+    """Store a short Freshness Guard message for the current session."""
+    st.session_state["freshness_notice"] = message
+    st.session_state["freshness_notice_level"] = level
+
+
+def freshness_event_text(status, notice):
+    """Turn the existing monitor notice into a concise UI event label."""
+    event_labels = {
+        "Monitoring started — latest file version sanitized.": (
+            "File loaded and monitored"
+        ),
+        "✓ No changes detected": "No changes detected",
+        "Change detected — latest file version loaded": (
+            "Change detected → latest version reprocessed"
+        ),
+        "✓ Latest version verified for download": "No changes detected",
+    }
+
+    if notice in event_labels:
+        return event_labels[notice]
+    if status == "UNAVAILABLE":
+        return "Monitored file unavailable"
+    if notice and "UTF-8" in notice:
+        return "File rejected — UTF-8 decode error"
+    if notice and "larger than 2 MB" in notice:
+        return "File rejected — exceeds 2 MB limit"
+    if notice and "Unsupported file type" in notice:
+        return "File rejected — unsupported file type"
+    if notice:
+        return "File rejected — " + notice
+    return "No file monitored yet"
+
+
+def load_monitored_file(file_path):
+    """Load, sanitize, and begin monitoring a local text file."""
+    text, resolved_path, modified_time, error = read_local_text_file(file_path)
+    if error:
+        set_freshness_notice(error, "error")
+        return error
+
+    fingerprint = content_fingerprint(text)
+    file_name = Path(resolved_path).name
+
+    st.session_state["monitored_file_path"] = resolved_path
+    st.session_state["monitored_file_name"] = file_name
+    st.session_state["monitored_latest_fingerprint"] = fingerprint
+    st.session_state["monitored_modified_time"] = modified_time
+    st.session_state["monitored_last_checked"] = time_label()
+    st.session_state["freshness_status"] = "FRESH"
+    st.session_state["monitor_action_error"] = None
+    st.session_state["monitored_download_ready"] = False
+    st.session_state["source_text"] = text
+    st.session_state["active_input_name"] = file_name
+
+    store_sanitized_result(text, file_name, fingerprint)
+    set_freshness_notice(
+        "Monitoring started — latest file version sanitized.", "success"
+    )
+    return None
+
+
+def check_monitored_file():
+    """Check the monitored file and re-sanitize it when its content changes."""
+    file_path = st.session_state.get("monitored_file_path")
+    if not file_path:
+        return "No local file is currently monitored."
+
+    text, resolved_path, modified_time, error = read_local_text_file(file_path)
+    st.session_state["monitored_last_checked"] = time_label()
+
+    if error:
+        st.session_state["freshness_status"] = "UNAVAILABLE"
+        st.session_state["monitor_action_error"] = error
+        st.session_state["monitored_download_ready"] = False
+        set_freshness_notice(error, "error")
+        return error
+
+    fingerprint = content_fingerprint(text)
+    st.session_state["monitored_latest_fingerprint"] = fingerprint
+    st.session_state["monitored_modified_time"] = modified_time
+    st.session_state["monitor_action_error"] = None
+    st.session_state["monitored_download_ready"] = False
+
+    if fingerprint == st.session_state.get("monitored_sanitized_fingerprint"):
+        st.session_state["freshness_status"] = "FRESH"
+        set_freshness_notice("✓ No changes detected", "success")
+        return None
+
+    file_name = Path(resolved_path).name
+    st.session_state["freshness_status"] = "CHANGE DETECTED / REFRESHED"
+    st.session_state["source_text"] = text
+    st.session_state["active_input_name"] = file_name
+    store_sanitized_result(text, file_name, fingerprint)
+    st.session_state["freshness_status"] = "FRESH"
+    set_freshness_notice(
+        "Change detected — latest file version loaded", "success"
+    )
+    return None
+
+
+def refresh_monitored_source_before_sanitize():
+    """Load the latest monitored source before the Sanitize action runs."""
+    file_path = st.session_state.get("monitored_file_path")
+    st.session_state["monitor_action_error"] = None
+    if not file_path:
+        return
+
+    text, resolved_path, modified_time, error = read_local_text_file(file_path)
+    st.session_state["monitored_last_checked"] = time_label()
+    st.session_state["monitored_download_ready"] = False
+
+    if error:
+        st.session_state["freshness_status"] = "UNAVAILABLE"
+        st.session_state["monitor_action_error"] = error
+        set_freshness_notice(error, "error")
+        return
+
+    fingerprint = content_fingerprint(text)
+    file_name = Path(resolved_path).name
+    changed = fingerprint != st.session_state.get(
+        "monitored_sanitized_fingerprint"
+    )
+    st.session_state["source_text"] = text
+    st.session_state["active_input_name"] = file_name
+    st.session_state["monitored_latest_fingerprint"] = fingerprint
+    st.session_state["monitored_modified_time"] = modified_time
+
+    if changed:
+        set_freshness_notice(
+            "Change detected — latest file version loaded", "success"
+        )
+
+
+def prepare_monitored_download():
+    """Verify and refresh a monitored result before enabling its download."""
+    file_path = st.session_state.get("monitored_file_path")
+    if not file_path:
+        return
+
+    text, resolved_path, modified_time, error = read_local_text_file(file_path)
+    st.session_state["monitored_last_checked"] = time_label()
+
+    if error:
+        st.session_state["freshness_status"] = "UNAVAILABLE"
+        st.session_state["monitor_action_error"] = error
+        st.session_state["monitored_download_ready"] = False
+        set_freshness_notice(error, "error")
+        return
+
+    fingerprint = content_fingerprint(text)
+    file_name = Path(resolved_path).name
+    st.session_state["monitored_latest_fingerprint"] = fingerprint
+    st.session_state["monitored_modified_time"] = modified_time
+    st.session_state["monitor_action_error"] = None
+
+    if fingerprint != st.session_state.get("monitored_sanitized_fingerprint"):
+        st.session_state["source_text"] = text
+        st.session_state["active_input_name"] = file_name
+        store_sanitized_result(text, file_name, fingerprint)
+        set_freshness_notice(
+            "Change detected — latest file version loaded", "success"
+        )
+    else:
+        set_freshness_notice("✓ Latest version verified for download", "success")
+
+    st.session_state["freshness_status"] = "FRESH"
+    st.session_state["monitored_download_ready"] = True
+
+
+def consume_prepared_download():
+    """Require a new freshness check before another monitored download."""
+    st.session_state["monitored_download_ready"] = False
+
+
 def clear_active_file():
     """Mark the text area as manual input after the user changes a widget."""
+    st.session_state["active_input_name"] = None
+    reset_monitoring_state()
+
+
+def clear_uploaded_file_selection():
+    """Keep a selected upload inactive until the user chooses to use it."""
     st.session_state["active_input_name"] = None
 
 
@@ -190,6 +459,18 @@ st.session_state.setdefault("source_text", "")
 st.session_state.setdefault("active_input_name", None)
 st.session_state.setdefault("sanitized_output", None)
 st.session_state.setdefault("sanitized_filename", None)
+st.session_state.setdefault("detection_counts", None)
+st.session_state.setdefault("monitored_file_path", None)
+st.session_state.setdefault("monitored_file_name", None)
+st.session_state.setdefault("monitored_latest_fingerprint", None)
+st.session_state.setdefault("monitored_sanitized_fingerprint", None)
+st.session_state.setdefault("monitored_modified_time", None)
+st.session_state.setdefault("monitored_last_checked", None)
+st.session_state.setdefault("freshness_status", "NOT MONITORED")
+st.session_state.setdefault("freshness_notice", None)
+st.session_state.setdefault("freshness_notice_level", "info")
+st.session_state.setdefault("monitor_action_error", None)
+st.session_state.setdefault("monitored_download_ready", False)
 
 st.html(
     """
@@ -303,6 +584,12 @@ st.html(
             background: #111821;
             border-radius: 0.75rem;
         }
+        .st-key-freshness_guard,
+        .st-key-freshness_status {
+            background: #0d151d;
+            border-color: #2a3b4d;
+            border-radius: 0.7rem;
+        }
         .st-key-detects_row {
             padding: 0.15rem 0 0.45rem;
         }
@@ -414,11 +701,84 @@ with st.container(border=True, key="input_section"):
         st.badge("API Keys", color="gray")
         st.badge("Tokens", color="gray")
 
+    with st.container(border=True, key="freshness_guard"):
+        st.markdown("#### Freshness Guard")
+        st.caption(
+            "Monitor a local text file and detect when its contents change "
+            "after sanitization. Localhost use only."
+        )
+        monitored_path_input = st.text_input(
+            "Local file path",
+            placeholder=r"C:\Projects\app\config.py",
+            key="monitored_path_input",
+        )
+
+        with st.container(horizontal=True):
+            st.button(
+                "Load & Monitor",
+                key="load_monitored_file",
+                on_click=load_monitored_file,
+                args=(monitored_path_input,),
+            )
+            if st.session_state["monitored_file_path"]:
+                st.button(
+                    "Check for Changes",
+                    key="check_monitored_file",
+                    on_click=check_monitored_file,
+                )
+
+        status = st.session_state["freshness_status"]
+        current_state = (
+            status
+            if status in {"NOT MONITORED", "FRESH", "UNAVAILABLE"}
+            else "FRESH"
+        )
+        status_color = {
+            "FRESH": "green",
+            "UNAVAILABLE": "red",
+            "NOT MONITORED": "gray",
+        }[current_state]
+        notice = st.session_state["freshness_notice"]
+        notice_level = st.session_state["freshness_notice_level"]
+        last_event = freshness_event_text(current_state, notice)
+
+        with st.container(border=True, key="freshness_status"):
+            state_column, event_column = st.columns(
+                [1, 2], vertical_alignment="top"
+            )
+            with state_column:
+                st.caption("Current State")
+                st.badge(current_state, color=status_color)
+            with event_column:
+                st.caption("Last Event")
+                if notice_level == "error":
+                    st.markdown(f":red[**{last_event}**]")
+                elif current_state == "FRESH":
+                    st.markdown(f":green[**{last_event}**]")
+                else:
+                    st.markdown(f"**{last_event}**")
+
+            if st.session_state["monitored_file_name"]:
+                st.caption(
+                    f'File: {st.session_state["monitored_file_name"]}'
+                )
+
+            last_checked = (
+                st.session_state["monitored_last_checked"] or "—"
+            )
+            modified_time = st.session_state["monitored_modified_time"]
+            last_modified = (
+                time_label(modified_time) if modified_time is not None else "—"
+            )
+            checked_column, modified_column = st.columns(2)
+            checked_column.caption(f"Last Checked: {last_checked}")
+            modified_column.caption(f"Last Modified: {last_modified}")
+
     uploaded_file = st.file_uploader(
         "Upload a file (optional)",
         type=["txt", "py", "json"],
         key="uploaded_file",
-        on_change=clear_active_file,
+        on_change=clear_uploaded_file_selection,
         max_upload_size=2,
     )
     st.caption(
@@ -441,13 +801,21 @@ with st.container(border=True, key="input_section"):
             st.code(preview, language=None)
 
             if st.button("Use Uploaded File"):
+                reset_monitoring_state()
                 st.session_state["source_text"] = uploaded_text
                 st.session_state["active_input_name"] = uploaded_file.name
 
     if st.session_state["active_input_name"]:
-        st.success(
-            f'Active input: uploaded file "{st.session_state["active_input_name"]}"'
-        )
+        if st.session_state["monitored_file_path"]:
+            st.success(
+                "Active input: monitored local file "
+                f'"{st.session_state["active_input_name"]}"'
+            )
+        else:
+            st.success(
+                "Active input: uploaded file "
+                f'"{st.session_state["active_input_name"]}"'
+            )
 
     st.caption("OR PASTE CONTENT")
     source_text = st.text_area(
@@ -464,56 +832,82 @@ with st.container(horizontal=True, key="primary_action"):
         type="primary",
         key="primary_sanitize",
         width="content",
+        on_click=refresh_monitored_source_before_sanitize,
     )
 
 if sanitize_clicked:
-    if not source_text.strip():
+    monitor_error = st.session_state.get("monitor_action_error")
+    if monitor_error:
+        st.warning(
+            "The monitored file is unavailable, so it was not sanitized. "
+            + monitor_error
+        )
+    elif not source_text.strip():
         st.warning("Enter some text to sanitize.")
     else:
         with st.spinner("Scanning locally for sensitive data...", show_time=False):
-            sanitized_text, detection_counts, placeholder_mapping = sanitize_text(
-                source_text
+            source_fingerprint = None
+            if st.session_state["monitored_file_path"]:
+                source_fingerprint = st.session_state[
+                    "monitored_latest_fingerprint"
+                ]
+
+            store_sanitized_result(
+                source_text,
+                st.session_state["active_input_name"],
+                source_fingerprint,
             )
-        st.session_state["placeholder_mapping"] = placeholder_mapping
-        st.session_state["sanitized_output"] = sanitized_text
-        st.session_state["sanitized_filename"] = sanitized_filename_for(
-            st.session_state["active_input_name"]
-        )
-        total_entities = sum(detection_counts.values())
-        categories_detected = sum(
-            count > 0 for count in detection_counts.values()
-        )
+        if st.session_state["monitored_file_path"]:
+            st.session_state["freshness_status"] = "FRESH"
+            st.session_state["monitored_download_ready"] = False
 
-        with st.container(border=True, key="protection_status"):
-            st.success(
-                f"{total_entities} sensitive entities neutralized · "
-                "0 external requests",
-                title="✓ Content Protected",
+detection_counts = st.session_state.get("detection_counts")
+monitored_result_is_current = (
+    not st.session_state["monitored_file_path"]
+    or (
+        st.session_state["freshness_status"] == "FRESH"
+        and st.session_state["monitored_latest_fingerprint"]
+        == st.session_state["monitored_sanitized_fingerprint"]
+    )
+)
+
+if detection_counts is not None and monitored_result_is_current:
+    total_entities = sum(detection_counts.values())
+    categories_detected = sum(
+        count > 0 for count in detection_counts.values()
+    )
+
+    with st.container(border=True, key="protection_status"):
+        st.success(
+            f"{total_entities} sensitive entities neutralized · "
+            "0 external requests",
+            title="✓ Content Protected",
+        )
+        with st.container(horizontal=True, key="security_metrics"):
+            st.metric(
+                "Categories Detected", categories_detected, border=True
             )
-            with st.container(horizontal=True, key="security_metrics"):
-                st.metric(
-                    "Categories Detected", categories_detected, border=True
-                )
-                st.metric("Local Processing", "100%", border=True)
-                st.metric("External Requests", 0, border=True)
+            st.metric("Local Processing", "100%", border=True)
+            st.metric("External Requests", 0, border=True)
 
-        st.subheader("2. Detection Summary")
-        st.caption("DETAILED DETECTIONS")
-        email_column, ipv4_column, password_column, api_key_column = st.columns(4)
-        email_column.metric("Email", detection_counts["Email"])
-        ipv4_column.metric("IPv4", detection_counts["IPv4"])
-        password_column.metric(
-            "Password", detection_counts["Password"]
-        )
-        api_key_column.metric(
-            "API Key / Token",
-            detection_counts["API Key / Token"],
-        )
+    st.subheader("2. Detection Summary")
+    st.caption("DETAILED DETECTIONS")
+    email_column, ipv4_column, password_column, api_key_column = st.columns(4)
+    email_column.metric("Email", detection_counts["Email"])
+    ipv4_column.metric("IPv4", detection_counts["IPv4"])
+    password_column.metric("Password", detection_counts["Password"])
+    api_key_column.metric(
+        "API Key / Token",
+        detection_counts["API Key / Token"],
+    )
 
-        if total_entities == 0:
-            st.info("No sensitive information detected.")
+    if total_entities == 0:
+        st.info("No sensitive information detected.")
 
-if st.session_state["sanitized_output"] is not None:
+if (
+    st.session_state["sanitized_output"] is not None
+    and monitored_result_is_current
+):
     st.subheader("3. Sanitized Result")
     original_column, protected_column = st.columns(2)
 
@@ -528,14 +922,44 @@ if st.session_state["sanitized_output"] is not None:
             st.markdown("#### Protected")
             st.badge("AI-SAFE", color="green")
             st.code(st.session_state["sanitized_output"], language=None)
-            st.download_button(
-                "Download Sanitized File",
-                data=st.session_state["sanitized_output"],
-                file_name=st.session_state["sanitized_filename"],
-                mime=mime_type_for(st.session_state["sanitized_filename"]),
-                key="download_sanitized",
-                on_click="ignore",
-            )
+            if st.session_state["monitored_file_path"]:
+                st.caption(
+                    "Verify the latest local version before each monitored "
+                    "download."
+                )
+                st.button(
+                    "Prepare Latest Download",
+                    key="prepare_monitored_download",
+                    on_click=prepare_monitored_download,
+                )
+                if st.session_state["monitored_download_ready"]:
+                    st.download_button(
+                        "Download Sanitized File",
+                        data=st.session_state["sanitized_output"],
+                        file_name=st.session_state["sanitized_filename"],
+                        mime=mime_type_for(
+                            st.session_state["sanitized_filename"]
+                        ),
+                        key="download_sanitized",
+                        on_click=consume_prepared_download,
+                    )
+            else:
+                st.download_button(
+                    "Download Sanitized File",
+                    data=st.session_state["sanitized_output"],
+                    file_name=st.session_state["sanitized_filename"],
+                    mime=mime_type_for(st.session_state["sanitized_filename"]),
+                    key="download_sanitized",
+                    on_click="ignore",
+                )
+elif (
+    st.session_state["sanitized_output"] is not None
+    and st.session_state["monitored_file_path"]
+):
+    st.warning(
+        "The monitored source is unavailable or newer than the current "
+        "sanitized result. Check for changes before using or downloading it."
+    )
 
 with st.container(
     horizontal=True,
