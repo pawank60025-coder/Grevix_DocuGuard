@@ -41,6 +41,8 @@ DocuGuard itself does **not** call an external AI API. Sending sanitized content
 - Sanitized file download
 - Detection summary
 - Before/after comparison
+- Freshness Guard for action-triggered local-file verification
+- SHA-256 content fingerprinting for monitored `.txt`, `.py`, and `.json` files
 - Session-only sensitive mapping
 - No external AI or API calls
 
@@ -97,6 +99,30 @@ DocuGuard accepts manually pasted text and the following text-based files:
 - `.json`
 
 The maximum file size is **2 MB**. Files are decoded as UTF-8, including UTF-8 with a BOM, and are processed as raw text. Python is not executed, and JSON is not evaluated as application code.
+
+## Phase 2 — Freshness Guard
+
+The original workflow assumed that a local file had not changed since it was sanitized. During active development or interrupted work, that assumption can leave the protected output, detection counts, download, and reversible mapping out of date.
+
+Freshness Guard adds optional local-path monitoring for `.txt`, `.py`, and `.json` files that the running Streamlit process can access. Monitored files retain the existing 2 MB limit and UTF-8/UTF-8 BOM decoding rules. Python and JSON content remains raw text and is never executed or evaluated.
+
+DocuGuard reads the latest content and compares its SHA-256 fingerprint with the fingerprint of the sanitized version. A check occurs when the user selects **Check for Changes**, before sanitization while monitoring is active, and before preparing a monitored sanitized download. If the content changed, DocuGuard reloads and sanitizes the latest version, updates the detection counts and download, replaces the previous session mapping, and returns the Current State to **FRESH**. The separate Last Event records what happened, including **File loaded and monitored**, **No changes detected**, **Change detected → latest version reprocessed**, or **Monitored file unavailable**.
+
+```mermaid
+flowchart TD
+    A[Monitored local file] --> B[Read latest content]
+    B --> C[Create SHA-256 fingerprint]
+    C --> D[Compare with sanitized fingerprint]
+    D -->|Unchanged| E[Keep current result]
+    D -->|Changed| F[Reload latest content]
+    F --> G[Sanitize]
+    G --> H[Replace mapping, counts, and download]
+    H --> I[FRESH]
+```
+
+Freshness Guard uses action-triggered verification rather than a filesystem watcher or continuous background polling. This avoids unnecessary disk reads, CPU overhead, Streamlit rerun instability, background race conditions, and extra dependencies. SHA-256 fingerprints are used instead of relying only on modification timestamps because a timestamp can change even when file content does not.
+
+Missing, deleted, or unreadable monitored files become **UNAVAILABLE**, and stale protected output is suppressed or blocked as appropriate. Browser uploads remain snapshots because the browser does not provide a reusable local filesystem path.
 
 ## Example
 
@@ -211,7 +237,11 @@ Development proceeded through incremental Git commits, targeted fixes, manual va
 - The reversible mapping exists only during the current Streamlit session.
 - There is no direct LLM integration.
 - The local-first privacy claim assumes local execution of the Streamlit app.
-- DocuGuard is not production-grade or audit-grade secret scanning software.
+- Freshness monitoring works only when the running Streamlit process can access the specified filesystem path.
+- Browser uploads are snapshots and cannot be re-read through Freshness Guard.
+- Freshness checks are action-triggered; there is no continuous background monitoring or operating-system-level file watcher.
+- A small theoretical interval remains between download preparation and the actual browser download click.
+- DocuGuard is a hackathon MVP, not enterprise DLP or audit-grade secret-scanning software.
 
 ## Future Work
 

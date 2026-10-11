@@ -121,3 +121,68 @@ This log records the major AI-assisted development decisions behind DocuGuard. A
 **Reason:** Security documentation must remain factual: the current app makes no external AI/API calls, processes uploads in memory, and keeps mappings in session state, but a remotely hosted instance would process user content on that host.
 
 **Rejected alternatives:** Absolute claims such as “data can never leave the device” were rejected because they would not remain true under every deployment model.
+
+## The Shift — Local Data Freshness Assumption
+
+### Problem
+
+The original DocuGuard workflow assumed that local code, documents, and logs were still current after sanitization. In practice, ongoing development, concurrent projects, interrupted work, or unsynchronized local changes can make the sanitized result and its reversible mapping stale.
+
+### Challenge Card Requirement
+
+The Phase 2 challenge required DocuGuard to detect outdated monitored local data, re-process the latest version, preserve the existing sanitization workflow, and balance freshness against performance and implementation complexity.
+
+### AI Recommendation
+
+ChatGPT helped interpret the challenge and define an action-triggered adaptation strategy: monitor an explicitly selected local text path, compare SHA-256 content fingerprints, and re-sanitize only when the content changes. OpenAI Codex implemented the targeted feature while preserving the Phase 1 sanitizer, mapping, restoration, upload, and download behavior.
+
+### My Decision
+
+I approved a session-only **Freshness Guard** for accessible `.txt`, `.py`, and `.json` paths. I retained the existing 2 MB limit, UTF-8/UTF-8 BOM decoding, and raw-text handling for Python and JSON files.
+
+### Implementation
+
+Freshness Guard records the monitored path, latest content fingerprint, sanitized fingerprint, timestamps, Current State, and Last Event in the Streamlit session. **Check for Changes** re-reads the file and compares its SHA-256 fingerprint with the sanitized fingerprint. Freshness is also verified before sanitization when monitoring is active and before preparing a monitored download.
+
+When content changes, DocuGuard loads and sanitizes the latest text, updates detection counts and sanitized output, prepares the updated downloadable result, and replaces the previous reversible mapping. The Current State then returns to **FRESH**, while the Last Event reports **Change detected → latest version reprocessed**. Missing, deleted, or unreadable monitored files become **UNAVAILABLE**, and stale output is suppressed or blocked as appropriate. Normal browser uploads remain snapshots because browsers do not expose a reusable local filesystem path.
+
+### Reason
+
+Action-triggered verification addresses the stale-data risk at the points where correctness matters without creating a background service. SHA-256 fingerprints were chosen instead of relying only on modification timestamps because timestamps can change without an actual content change.
+
+### Tradeoff
+
+Freshness checks occur when the user clicks **Check for Changes**, before sanitization while monitoring is active, and before preparing a monitored sanitized download. This avoids unnecessary disk reads, CPU overhead, Streamlit session and rerun instability, background race conditions, and extra implementation complexity. It is not continuous real-time monitoring, and a small theoretical interval remains between download preparation and the browser's download click.
+
+### Rejected Alternatives
+
+- `watchdog` or another background filesystem watcher
+- Continuous or sleep-based polling
+- Cloud synchronization
+- Database persistence
+- A full React/frontend rewrite
+- Automatic network synchronization
+
+These options introduced unnecessary dependencies, background state, implementation complexity, or privacy and performance risk for this prototype.
+
+### Validation
+
+The participant manually validated a monitored file that initially contained:
+
+```text
+Email: first@example.com
+password = "old-secret"
+```
+
+The file was later changed to:
+
+```text
+Email: second@example.com
+Server: 10.0.0.5
+password = "new-secret"
+api_key = "new-api-key"
+```
+
+DocuGuard detected the change, loaded and sanitized the latest version, replaced the old mapping, and restored `[EMAIL_1]` to `second@example.com` and `[IPV4_1]` to `10.0.0.5` correctly.
+
+Google Antigravity / Gemini independently reviewed the Phase 2 implementation with a result of **PASS**. The participant manually performed the changed-file and restoration test and retained responsibility for the final decision, validation, and submitted implementation.
