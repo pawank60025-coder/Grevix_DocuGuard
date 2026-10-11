@@ -39,7 +39,7 @@ DocuGuard itself does **not** call an external AI API. Sending sanitized content
 - 2 MB file limit
 - UTF-8 and UTF-8 BOM handling
 - Sanitized file download
-- Detection summary
+- Explainable Privacy Report with deterministic LOW, MEDIUM, and HIGH risk levels
 - Before/after comparison
 - Freshness Guard for action-triggered local-file verification
 - SHA-256 content fingerprinting for monitored `.txt`, `.py`, and `.json` files

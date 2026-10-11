@@ -119,6 +119,31 @@ def sanitize_text(text):
     return sanitized, counts, placeholder_mapping
 
 
+def privacy_risk_level(detection_counts):
+    """Return the deterministic privacy risk level and its explanation."""
+    credential_detected = any(
+        detection_counts.get(category, 0) > 0
+        for category in ("Password", "API Key / Token")
+    )
+    if credential_detected:
+        return (
+            "HIGH",
+            "At least one Password or API Key / Token / Secret was detected.",
+        )
+
+    identifier_detected = any(
+        detection_counts.get(category, 0) > 0
+        for category in ("Email", "IPv4")
+    )
+    if identifier_detected:
+        return (
+            "MEDIUM",
+            "Email or IPv4 data was detected, with no credential category detected.",
+        )
+
+    return "LOW", "No supported sensitive entities were detected."
+
+
 def restore_text(text, mapping):
     """Restore only placeholders found in the current session mapping."""
     if not mapping:
@@ -606,10 +631,10 @@ st.html(
             background: #096b9f;
             border-color: #67d9f3;
         }
-        .st-key-protection_status {
-            background: #0e211c;
-            border: 1px solid #236a53;
-            border-left: 4px solid #34d399;
+        .st-key-privacy_report {
+            background: #0f1720;
+            border: 1px solid #30445a;
+            border-left: 4px solid #22b8cf;
             border-radius: 0.75rem;
         }
         .st-key-original_panel {
@@ -873,36 +898,38 @@ monitored_result_is_current = (
 
 if detection_counts is not None and monitored_result_is_current:
     total_entities = sum(detection_counts.values())
-    categories_detected = sum(
-        count > 0 for count in detection_counts.values()
-    )
+    risk_level, risk_explanation = privacy_risk_level(detection_counts)
+    risk_color = {"HIGH": "red", "MEDIUM": "orange", "LOW": "green"}[
+        risk_level
+    ]
 
-    with st.container(border=True, key="protection_status"):
-        st.success(
-            f"{total_entities} sensitive entities neutralized · "
-            "0 external requests",
-            title="✓ Content Protected",
+    with st.container(border=True, key="privacy_report"):
+        st.subheader("2. Privacy Report")
+        st.caption("EXPLAINABLE LOCAL ASSESSMENT")
+
+        risk_column, explanation_column = st.columns(
+            [1, 2.4], vertical_alignment="center"
         )
-        with st.container(horizontal=True, key="security_metrics"):
+        with risk_column:
+            st.caption("RISK LEVEL")
+            st.badge(risk_level, color=risk_color)
+        with explanation_column:
+            st.caption("WHY THIS LEVEL")
+            st.markdown(f"**{risk_explanation}**")
+
+        with st.container(horizontal=True, key="privacy_metrics"):
             st.metric(
-                "Categories Detected", categories_detected, border=True
+                "Total sensitive entities detected",
+                total_entities,
+                border=True,
             )
             st.metric("Local Processing", "100%", border=True)
             st.metric("External Requests", 0, border=True)
 
-    st.subheader("2. Detection Summary")
-    st.caption("DETAILED DETECTIONS")
-    email_column, ipv4_column, password_column, api_key_column = st.columns(4)
-    email_column.metric("Email", detection_counts["Email"])
-    ipv4_column.metric("IPv4", detection_counts["IPv4"])
-    password_column.metric("Password", detection_counts["Password"])
-    api_key_column.metric(
-        "API Key / Token",
-        detection_counts["API Key / Token"],
-    )
-
-    if total_entities == 0:
-        st.info("No sensitive information detected.")
+        st.caption("DETECTED CATEGORIES")
+        with st.container(horizontal=True, key="category_counts"):
+            for category, count in detection_counts.items():
+                st.metric(category, count, border=True)
 
 if (
     st.session_state["sanitized_output"] is not None
@@ -990,7 +1017,7 @@ with st.container(border=True, key="restore_section"):
         placeholder="Paste an AI response with DocuGuard placeholders here...",
     )
 
-    if st.button("Restore Original Values"):
+    if st.button("Restore Original Values", key="restore_original_values"):
         current_mapping = st.session_state.get("placeholder_mapping", {})
 
         if not current_mapping:
