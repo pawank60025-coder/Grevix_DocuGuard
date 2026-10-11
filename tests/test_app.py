@@ -1,4 +1,5 @@
 import tempfile
+import tomllib
 import unittest
 from pathlib import Path
 
@@ -18,6 +19,19 @@ class UploadedFileStub:
 
     def getvalue(self):
         return self._content
+
+
+class ThemeConfigurationRegressionTests(unittest.TestCase):
+    def test_streamlit_theme_is_locked_to_the_docuguard_dark_palette(self):
+        config_path = PROJECT_ROOT / ".streamlit" / "config.toml"
+        with config_path.open("rb") as config_file:
+            theme = tomllib.load(config_file)["theme"]
+
+        self.assertEqual(theme["base"], "dark")
+        self.assertEqual(theme["backgroundColor"], "#0B1016")
+        self.assertEqual(theme["secondaryBackgroundColor"], "#111821")
+        self.assertEqual(theme["textColor"], "#E6EDF3")
+        self.assertTrue(theme["showWidgetBorder"])
 
 
 class SanitizationRegressionTests(unittest.TestCase):

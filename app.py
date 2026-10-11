@@ -500,9 +500,9 @@ st.session_state.setdefault("monitored_download_ready", False)
 st.html(
     """
     <style>
-        :root { color-scheme: dark; }
-        [data-testid="stAppViewContainer"], [data-testid="stHeader"] {
-            background: #0b1016;
+        :root {
+            color-scheme: dark;
+            font-synthesis: none;
         }
         [data-testid="stMainBlockContainer"] {
             max-width: 1080px;
@@ -510,14 +510,57 @@ st.html(
             padding-bottom: 2rem;
         }
         [data-testid="stAppViewContainer"] {
-            color: #e6edf3;
+            font-size: 1rem;
         }
         [data-testid="stAppViewContainer"] h1,
         [data-testid="stAppViewContainer"] h2,
         [data-testid="stAppViewContainer"] h3,
+        [data-testid="stAppViewContainer"] h4 {
+            line-height: 1.2;
+            letter-spacing: -0.012em;
+            overflow-wrap: anywhere;
+            text-wrap: balance;
+        }
         [data-testid="stAppViewContainer"] p,
         [data-testid="stAppViewContainer"] label {
-            color: #e6edf3;
+            line-height: 1.5;
+        }
+        [data-testid="stCaptionContainer"] p {
+            color: #9fb0c2;
+            font-size: 0.82rem;
+            line-height: 1.4;
+            margin: 0;
+            overflow-wrap: anywhere;
+        }
+        [data-testid="stWidgetLabel"] p {
+            line-height: 1.35;
+            white-space: normal;
+        }
+        [data-testid="stMetric"] {
+            min-width: 0;
+        }
+        [data-testid="stMetricLabel"] {
+            align-items: flex-start;
+            min-height: 2.35rem;
+        }
+        [data-testid="stMetricLabel"] p,
+        [data-testid="stMetricValue"] {
+            line-height: 1.25;
+            overflow-wrap: anywhere;
+            white-space: normal;
+        }
+        [data-testid="stAlert"] {
+            align-items: flex-start;
+        }
+        [data-testid="stAlert"] p {
+            line-height: 1.45;
+            overflow-wrap: anywhere;
+        }
+        [data-testid="stButton"] button,
+        [data-testid="stDownloadButton"] button {
+            min-height: 2.75rem;
+            line-height: 1.2;
+            white-space: normal;
         }
         .st-key-hero { padding: 0 0 0.25rem; }
         .dg-eyebrow {
@@ -548,7 +591,7 @@ st.html(
         }
         .dg-wordmark {
             color: #f3f7fb;
-            font-size: 2.25rem;
+            font-size: clamp(1.85rem, 5vw, 2.25rem);
             font-weight: 750;
             line-height: 1;
         }
@@ -594,6 +637,7 @@ st.html(
             border-radius: 0.75rem;
             padding: 0.5rem 0.8rem;
             margin-bottom: 0.75rem;
+            overflow: hidden;
         }
         .st-key-restore_workflow {
             background: #0d141c;
@@ -603,17 +647,20 @@ st.html(
             margin-top: 0.5rem;
             margin-bottom: 0.55rem;
             opacity: 0.9;
+            overflow: hidden;
         }
         .st-key-input_section,
         .st-key-restore_section {
             background: #111821;
             border-radius: 0.75rem;
+            overflow: hidden;
         }
         .st-key-freshness_guard,
         .st-key-freshness_status {
             background: #0d151d;
             border-color: #2a3b4d;
             border-radius: 0.7rem;
+            overflow: hidden;
         }
         .st-key-detects_row {
             padding: 0.15rem 0 0.45rem;
@@ -636,23 +683,67 @@ st.html(
             border: 1px solid #30445a;
             border-left: 4px solid #22b8cf;
             border-radius: 0.75rem;
+            overflow: hidden;
+        }
+        .st-key-privacy_metrics,
+        .st-key-category_counts {
+            align-items: stretch;
+            gap: 0.65rem;
+        }
+        .st-key-privacy_metrics [data-testid="stMetric"],
+        .st-key-category_counts [data-testid="stMetric"] {
+            flex: 1 1 10.5rem;
         }
         .st-key-original_panel {
             background: #151216;
             border: 1px solid #743840;
             border-left: 4px solid #ef6b73;
             border-radius: 0.75rem;
+            overflow: hidden;
         }
         .st-key-protected_panel {
             background: #0d171b;
             border: 1px solid #266577;
             border-left: 4px solid #22b8cf;
             border-radius: 0.75rem;
+            overflow: hidden;
         }
         .st-key-footer_note {
             margin-top: 1.5rem;
             padding-top: 1rem;
             border-top: 1px solid #273241;
+        }
+        @media (max-width: 640px) {
+            [data-testid="stMainBlockContainer"] {
+                padding-left: 0.85rem;
+                padding-right: 0.85rem;
+                padding-top: 1rem;
+            }
+            .dg-brand-lockup {
+                gap: 0.6rem;
+            }
+            .dg-monogram {
+                width: 2.25rem;
+                height: 2.25rem;
+                flex: 0 0 2.25rem;
+            }
+            .st-key-workflow_strip [data-testid="stMarkdownContainer"],
+            .st-key-restore_workflow [data-testid="stMarkdownContainer"] {
+                display: none;
+            }
+            .st-key-primary_sanitize,
+            .st-key-primary_sanitize button,
+            .st-key-prepare_monitored_download,
+            .st-key-prepare_monitored_download button,
+            .st-key-download_sanitized,
+            .st-key-download_sanitized button {
+                min-width: 0;
+                width: 100%;
+            }
+            .st-key-privacy_metrics [data-testid="stMetric"],
+            .st-key-category_counts [data-testid="stMetric"] {
+                flex-basis: 100%;
+            }
         }
     </style>
     """
@@ -697,6 +788,8 @@ with st.container(key="hero"):
 with st.container(
     horizontal=True,
     vertical_alignment="center",
+    gap="small",
+    wrap=True,
     key="workflow_strip",
 ):
     st.badge("INPUT", color="gray")
@@ -716,6 +809,8 @@ with st.container(border=True, key="input_section"):
     with st.container(
         horizontal=True,
         vertical_alignment="center",
+        gap="small",
+        wrap=True,
         key="detects_row",
     ):
         st.caption("DETECTS")
@@ -740,7 +835,7 @@ with st.container(border=True, key="input_section"):
             key="monitored_path_input",
         )
 
-        with st.container(horizontal=True):
+        with st.container(horizontal=True, gap="small", wrap=True):
             st.button(
                 "Load & Monitor",
                 key="load_monitored_file",
@@ -853,7 +948,7 @@ with st.container(border=True, key="input_section"):
         on_change=clear_active_file,
     )
 
-with st.container(horizontal=True, key="primary_action"):
+with st.container(horizontal=True, wrap=True, key="primary_action"):
     sanitize_clicked = st.button(
         "Sanitize & Protect",
         type="primary",
@@ -922,7 +1017,12 @@ if detection_counts is not None and monitored_result_is_current:
             st.caption("WHY THIS LEVEL")
             st.markdown(f"**{risk_explanation}**")
 
-        with st.container(horizontal=True, key="privacy_metrics"):
+        with st.container(
+            horizontal=True,
+            gap="small",
+            wrap=True,
+            key="privacy_metrics",
+        ):
             st.metric(
                 "Total sensitive entities detected",
                 total_entities,
@@ -932,7 +1032,12 @@ if detection_counts is not None and monitored_result_is_current:
             st.metric("External AI/API Requests", 0, border=True)
 
         st.caption("DETECTED CATEGORIES")
-        with st.container(horizontal=True, key="category_counts"):
+        with st.container(
+            horizontal=True,
+            gap="small",
+            wrap=True,
+            key="category_counts",
+        ):
             for category, count in detection_counts.items():
                 st.metric(category, count, border=True)
 
@@ -996,6 +1101,8 @@ elif (
 with st.container(
     horizontal=True,
     vertical_alignment="center",
+    gap="small",
+    wrap=True,
     key="restore_workflow",
 ):
     st.badge("Sanitized Prompt", color="blue")

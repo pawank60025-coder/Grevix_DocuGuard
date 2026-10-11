@@ -1,0 +1,28 @@
+[theme]
+base = "dark"
+primaryColor = "#0878B9"
+backgroundColor = "#0B1016"
+secondaryBackgroundColor = "#111821"
+textColor = "#E6EDF3"
+linkColor = "#67D9F3"
+codeTextColor = "#DFF8FF"
+codeBackgroundColor = "#0D141C"
+borderColor = "#2A3B4D"
+showWidgetBorder = true
+baseRadius = "12px"
+buttonRadius = "10px"
+
+font = "sans-serif"
+headingFont = "sans-serif"
+codeFont = "monospace"
+baseFontSize = 16
+baseFontWeight = 400
+codeFontSize = "0.875rem"
+headingFontSizes = ["2rem", "1.5rem", "1.25rem", "1.05rem", "0.9rem", "0.8rem"]
+headingFontWeights = [750, 700, 675, 650, 650, 650]
+
+redColor = "#EF6B73"
+orangeColor = "#F0A45D"
+greenColor = "#34D399"
+blueColor = "#35C3E5"
+grayColor = "#9FB0C2"
